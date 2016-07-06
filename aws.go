@@ -17,6 +17,7 @@ type S3Type struct {
 	Bucket      string `json:"bucket"`
 	FileName    string `json:"file_name"`
 	Id          string `json:"id"`
+	PageNumber	string `json:"page_number"`
 }
 
 func (s3 S3Type) FullPath() string {
@@ -122,7 +123,7 @@ func InterfaceToS3Type(inter interface{}) S3Type {
 	header := parseMap(inter.(map[string]interface{}))
 	next = inter.(map[string]interface{})[header]
 
-	s3 := S3Type{next.(map[string]interface{})["content_type"].(string), next.(map[string]interface{})["bucket"].(string), next.(map[string]interface{})["file_name"].(string), next.(map[string]interface{})["id"].(string)}
+	s3 := S3Type{next.(map[string]interface{})["content_type"].(string), next.(map[string]interface{})["bucket"].(string), next.(map[string]interface{})["file_name"].(string), next.(map[string]interface{})["id"].(string), next.(map[string]interface{})["page_number"].(string)}
 
 	return s3
 }
