@@ -30,7 +30,7 @@ func ListBucket(bucketName string) {
 		log.Error(err)
 	}
 
-	connection := s3.New(auth, aws.USWest)
+	connection := s3.New(auth, aws.USEast)
 	bucket := connection.Bucket(bucketName)
 
 	res, err := bucket.List("", "", "", 1000)
@@ -50,7 +50,7 @@ func Upload(obj S3Type, bytes []byte) error {
 		return err
 	}
 
-	connection := s3.New(auth, aws.USWest)
+	connection := s3.New(auth, aws.USEast)
 	bucket := connection.Bucket(obj.Bucket)
 
 	if bucket.Put(obj.FileName, bytes, obj.ContentType, s3.ACL("public-read"), s3.Options{}); err != nil {
@@ -68,7 +68,7 @@ func Download(obj S3Type) error {
 		return err
 	}
 
-	connection := s3.New(auth, aws.USWest)
+	connection := s3.New(auth, aws.USEast)
 	bucket := connection.Bucket(obj.Bucket)
 
 	bytes, err := bucket.Get(obj.FileName)
