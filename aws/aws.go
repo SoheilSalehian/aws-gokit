@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/goamz/goamz/aws"
 	"github.com/goamz/goamz/s3"
@@ -116,6 +117,10 @@ func GetFromSQS(obj S3Type) (sqs.ReceiveMessageResponse, error) {
 	}
 
 	return *resp, nil
+}
+
+func SignURL(bucket s3.Bucket, path string) string {
+	return bucket.SignedURL(path, time.Time.Now().Add(time.Duration.Minute*10))
 }
 
 func InterfaceToS3Type(inter interface{}) S3Type {
