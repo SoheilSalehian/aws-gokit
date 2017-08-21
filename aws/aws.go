@@ -7,9 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/goamz/goamz/aws"
-	"github.com/goamz/goamz/s3"
-	"github.com/goamz/goamz/sqs"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	// TODO: rewrite these to the aws-sdk versions
+	goamzaws "github.com/goamz/goamz/aws"
+	goamzs3 "github.com/goamz/goamz/s3"
+	goamzsqs "github.com/goamz/goamz/sqs"
 	"github.com/prometheus/common/log"
 )
 
@@ -21,17 +25,17 @@ type S3Type struct {
 	PageNumber  string `json:"page_number"`
 }
 
-func (s3 S3Type) FullPath() string {
-	return fmt.Sprintf("%s/%s", s3.Bucket, s3.FileName)
+func (goamzs3 S3Type) FullPath() string {
+	return fmt.Sprintf("%s/%s", goamzs3.Bucket, goamzs3.FileName)
 }
 
 func ListBucket(bucketName string) {
-	auth, err := aws.EnvAuth()
+	auth, err := goamzaws.EnvAuth()
 	if err != nil {
 		log.Error(err)
 	}
 
-	connection := s3.New(auth, aws.USEast)
+	connection := goamzs3.New(auth, goamzaws.USEast)
 	bucket := connection.Bucket(bucketName)
 
 	res, err := bucket.List("", "", "", 1000)
@@ -45,16 +49,16 @@ func ListBucket(bucketName string) {
 }
 
 func Upload(obj S3Type, bytes []byte) error {
-	auth, err := aws.EnvAuth()
+	auth, err := goamzaws.EnvAuth()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	connection := s3.New(auth, aws.USEast)
+	connection := goamzs3.New(auth, goamzaws.USEast)
 	bucket := connection.Bucket(obj.Bucket)
 
-	if bucket.Put(obj.FileName, bytes, obj.ContentType, s3.ACL("public-read"), s3.Options{}); err != nil {
+	if bucket.Put(obj.FileName, bytes, obj.ContentType, goamzs3.ACL("public-read"), goamzs3.Options{}); err != nil {
 		return err
 	}
 
@@ -63,13 +67,13 @@ func Upload(obj S3Type, bytes []byte) error {
 
 func Download(obj S3Type) error {
 	log.Info("Downloading:", obj)
-	auth, err := aws.EnvAuth()
+	auth, err := goamzaws.EnvAuth()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	connection := s3.New(auth, aws.USEast)
+	connection := goamzs3.New(auth, goamzaws.USEast)
 	bucket := connection.Bucket(obj.Bucket)
 
 	bytes, err := bucket.Get(obj.FileName)
@@ -92,36 +96,69 @@ func Download(obj S3Type) error {
 	return nil
 }
 
-func GetFromSQS(obj S3Type) (sqs.ReceiveMessageResponse, error) {
-	auth, err := aws.EnvAuth()
+func GenerateSignedURL(obj S3Type) (string, error) {
+	svc := s3.New(session.New(&aws.Config{Region: aws.String("us-east-1")}))
+	req, _ := svc.PutObjectRequest(&s3.PutObjectInput{
+		Bucket: aws.String(obj.Bucket),
+		Key:    aws.String(obj.FileName),
+	})
+
+	signedURL, err := req.Presign(15 * time.Minute)
 	if err != nil {
-		log.Error(err)
-		return sqs.ReceiveMessageResponse{}, err
+		log.Error(err, " for", obj.FileName)
+		return "", err
 	}
 
-	// FIXME: hardcoded region: https://github.com/goamz/goamz/blob/master/sqs/sqs.go#L41
-	conn, err := sqs.NewFrom(auth.AccessKey, auth.SecretKey, "us.east")
+	return signedURL, nil
+	// auth, err := aws.EnvAuth()
+	// if err != nil {
+	// 	log.Error(err)
+	// 	return "", err
+	// }
+	//
+	// connection := goamzs3.New(auth, aws.USEast)
+	// bucket := connection.Bucket(obj.Bucket)
+	//
+	// signedURL := bucket.UploadSignedURL(obj.FileName, "PUT", obj.ContentType, time.Now().Add(time.Minute*10))
+	// if signedURL == "" {
+	// 	err = errors.New("A signed URL failed to be generated")
+	// 	log.Error(err, " for", obj.FileName)
+	// 	return "", err
+	// }
+	//
+}
+
+func GetFromSQS(obj S3Type) (goamzsqs.ReceiveMessageResponse, error) {
+	auth, err := goamzaws.EnvAuth()
 	if err != nil {
-		return sqs.ReceiveMessageResponse{}, err
+		log.Error(err)
+		return goamzsqs.ReceiveMessageResponse{}, err
+	}
+
+	// FIXME: hardcoded region: https://github.com/goamz/goamz/blob/master goamzsqs goamzsqs.go#L41
+	conn, err := goamzsqs.NewFrom(auth.AccessKey, auth.SecretKey, "us.east")
+	if err != nil {
+		return goamzsqs.ReceiveMessageResponse{}, err
 	}
 
 	q, err := conn.GetQueue("pipedream-queue")
 	if err != nil {
-		return sqs.ReceiveMessageResponse{}, err
+		return goamzsqs.ReceiveMessageResponse{}, err
 	}
 	log.Info("Receiving message from ", q.Name)
 
 	resp, err := q.ReceiveMessage(1)
 	if err != nil {
-		return sqs.ReceiveMessageResponse{}, err
+		return goamzsqs.ReceiveMessageResponse{}, err
 	}
 
 	return *resp, nil
 }
 
-func SignURL(bucket s3.Bucket, path string) string {
-	return bucket.SignedURL(path, time.Time.Now().Add(time.Duration.Minute*10))
-}
+// func SignURL(obj S3Type) string {
+// 	b := connection.Bucket(obj.Bucket)
+// 	return
+// }
 
 func InterfaceToS3Type(inter interface{}) S3Type {
 	var next interface{}
